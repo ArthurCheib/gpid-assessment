@@ -2,7 +2,8 @@ project:
   type: website
   
 website: 
-  title: 'Quarto'
+  title: 'Arthur Cheib - GPID Assessment'
   navbar: 
     left: 
-      - index.html
+      - basic_stats.qmd
+      - simulated_data.qmd

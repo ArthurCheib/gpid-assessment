@@ -1,0 +1,152 @@
+---
+title: "Basic Stats"
+format: html
+editor: visual
+---
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+## Libraries
+library(tidyverse)
+library(lubridate)
+library(data.table)
+library(here)
+library(waldo)
+library(knitr)
+library(DT)
+source(here('functions', 'get_data.R'))
+source(here('functions', 'weighted_sd.R'))
+```
+
+## Basic Stats
+
+### Q1 - Summary Statistics
+
+Computing summary statistics of the World Development Indicators (WDI) dataset, 'wdi_data', which contains socio-economic metrics for various countries over time (in years).
+
+```{r message=FALSE, warning=FALSE}
+## Loading the data to be computed
+wdi_file <- 'wdi_in1.Rds'
+wdi_data <- get_data(rds_file = wdi_file)
+
+## Data to be replicated
+desired_output1 <- get_data(rds_file = 'wdi_summ_out.Rds') |> 
+  arrange(region, year, N, Mean) |> 
+  as.data.frame()
+  
+## Replicating GDP per capita by region
+wdi_summary_gdp <- wdi_data |> 
+  mutate(year = as.character(date)) |> 
+  select(region, iso3c, year, everything(), -date) |> 
+  filter(!is.na(gdp)) |> 
+  group_by(region, year) |> 
+  summarize(N = as.double(n()),
+            Mean = weighted.mean(gdp, pop, na.rm = TRUE),
+            SD = weighted_sd(gdp, pop, na.rm = TRUE),
+            Min = min(gdp, na.rm = TRUE),
+            Max = max(gdp, na.rm = TRUE)) |> 
+  ungroup() |>
+  arrange(region, year, N, Mean) |> 
+  as.data.frame()
+
+## Displaying the table
+datatable(wdi_summary_gdp, options = list(pageLength = 10))
+
+```
+
+### Q2 - Aggregated stats
+
+At this part, we are aggregating the following key socioeconomic variables: `life expectancy`, `GDP`, and `poverty rates` - adjusting for population size to ensure that statistics are representative of regional weights - and reshaping the data for comparability across estimates.
+
+```{r message=FALSE, warning=FALSE}
+## Data to be replicated
+desired_output2 <- get_data(rds_file = 'wdi_agg_out.Rds') |> 
+  arrange(estimate, region, date, lifeex)
+
+## Replicating the aggregate results
+# Selecting the cols of interest for aggregatin'
+agg_cols <- c("lifeex", "gdp", "povintl")
+
+## Computing the agg stats
+# 1st agg: population
+agg_pop <- wdi_data |>
+  filter(!is.na(gdp)) |> 
+  group_by(region, date) |> 
+  summarize(pop = sum(pop))
+
+# 2nd agg: lifeex, gdp and pov_intl variables + 1st agg (merging at the end)
+wdi_agg_stats <- wdi_data |>
+  filter(!is.na(gdp)) |> 
+  select(region, date, pop, lifeex, gdp, pov_intl) |> 
+  rename_with(~ gsub("_", "", .x)) |> 
+  group_by(region, date) |> 
+  summarize(across(all_of(agg_cols),
+                   list(max = max,
+                        min = min,
+                        median = median,
+                        mean = ~weighted.mean(., pop, na.rm = TRUE),
+                        sd = ~weighted_sd(., pop, na.rm = TRUE)),
+                   .names = "{.col}_{.fn}"),
+            .groups = "drop") |>
+  pivot_longer(cols = starts_with(agg_cols), 
+               names_to = c(".value", "estimate"), 
+               names_sep = "_") |> 
+  ## Merging the aggregated results with the the info on the population for each region
+  left_join(agg_pop, by = c('region', 'date')) |> 
+  select(estimate, region, date, pop, lifeex:povintl) |> 
+  arrange(estimate, region, date, lifeex)
+
+## Displaying the table
+datatable(wdi_agg_stats, options = list(pageLength = 10))
+```
+
+## Q3 - Finding Outliers
+
+```{r message=FALSE, warning=FALSE}
+## Data to be replicated
+desired_output3 <- get_data(rds_file = 'wdi_outliers_out.Rds')
+cols_to_compute <- c('lifeex', 'gdp', 'gini')
+
+## Finding the outliers
+# Step 1: get the mean and sd for the variables of interest for the whole world at every given year
+world_stats <- wdi_data |>
+  group_by(date) |> 
+  summarize(across(all_of(cols_to_compute),
+                   list(mean = ~weighted.mean(., pop, na.rm = TRUE),
+                        sd = ~weighted_sd(., pop, na.rm = TRUE)),
+                   .names = "{.fn}_{.col}"))
+
+# Step 2: merge the world stats with `wdi_data`
+outliers_data <- wdi_data |> 
+  left_join(world_stats, by = 'date')
+
+# Step 3: calculate the outliers and their respective flags
+outliers_data_final <- outliers_data |> 
+  mutate(hl_lifeex = lifeex > (mean_lifeex + (2.5 * sd_lifeex)),
+         ll_lifeex = lifeex < (mean_lifeex - (2.5 * sd_lifeex)),
+         hl_gdp = gdp > (mean_gdp + (2.5 * sd_gdp)),
+         ll_gdp = gdp < (mean_gdp - (2.5 * sd_gdp)),
+         hl_gini = gini > (mean_gini + (2.5 * sd_gini)),
+         ll_gini = gini < (mean_gini - (2.5 * sd_gini))) |> 
+  select(colnames(desired_output3))
+
+## Displaying the table
+datatable(outliers_data_final, options = list(pageLength = 10))
+
+# Step 4: reproduce the graph
+outliers_graph <- outliers_data_final |> 
+  ggplot(aes(x = date, y = mean_lifeex)) +
+  theme_minimal() +
+  geom_ribbon(aes(ymin = (mean_lifeex + 2.5 * sd_lifeex),
+                  ymax = (mean_lifeex - 2.5 * sd_lifeex)), 
+              fill = "grey", alpha = 0.50) +
+  geom_line(data = world_stats, aes(x = date, y = mean_lifeex), color = "blue", linewidth = .50) +
+  geom_point(aes(x = date, y = lifeex, color = region), position = position_dodge(width = 0.1)) +
+  theme(legend.position = c(0.5, 0.20),
+        legend.justification = "center",
+        legend.background = element_blank(), 
+        legend.margin = margin(6, 6, 6, 6)) +
+  guides(color = guide_legend(ncol = 4))
+
+## Displaying the graph
+outliers_graph
+```

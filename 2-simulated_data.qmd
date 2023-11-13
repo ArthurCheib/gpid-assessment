@@ -1,0 +1,117 @@
+---
+title: "Simulated Data"
+format: html
+editor: visual
+---
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+## Libraries
+library(tidyverse)
+library(lubridate)
+library(data.table)
+library(here)
+library(waldo)
+library(knitr)
+library(DT)
+library(janitor)
+source(here('functions', 'get_data.R'))
+source(here('functions', 'fgt_calculator.R'))
+source(here('functions', 'survey_long.R'))
+source(here('functions', 'gini_calculator.R'))
+source(here('functions', 'df_lorenz.R'))
+```
+
+## Simulated Data
+
+### Q4 - Poverty Measures
+
+```{r message=FALSE, warning=FALSE}
+## Loading the data we will be working with: simulated household surveys
+wdi_file <- 'svy_sim_in1.Rds'
+wdi_household <- get_data(rds_file = wdi_file)
+
+## Estimating the poverty measures
+years <- names(wdi_household)
+pv_lines <- c(2.15, 3.65, 6.85)
+
+poverty_measures <- tibble()
+
+## Nested loop to compute the values for all combinations of years vs. poverty lines
+for (table in years) {
+  
+  temp_results <- tibble()
+  
+  ## For every poverty line ...
+  for (pv_line in pv_lines) {
+    
+    ## ... In a given year: compute FGT + bind_row the results
+    temp_data <- FGT_calculator(survey_data = wdi_household[table],
+                                year = table,
+                                poverty_line = pv_line)
+    
+    temp_results <- temp_results |> 
+      bind_rows(temp_data)
+    
+  }
+  
+  poverty_measures <- poverty_measures |> 
+    bind_rows(temp_results)
+  
+}
+
+## Displaying the table
+datatable(poverty_measures, options = list(pageLength = 10))
+
+## Replicating the graph (tried to make exactly as shown - no titles, subtitles, caption...)
+poverty_measures |> 
+  ggplot(aes(x = year, y = headcount, color = as.character(pov_line))) +
+  geom_point() +
+  geom_line(aes(group = pov_line)) +
+  theme_minimal() +
+  labs(color = '') +
+  theme(legend.position = 'bottom')
+
+```
+
+### Q5 - Lorenz Curve
+
+```{r message=FALSE, warning=FALSE}
+## Transforming the data into long format
+long_household <- map_df(names(wdi_household), ~survey_long(.x, wdi_household[[.x]]))
+
+## Computing the Lorenz's variables
+lorenz_curve <- df_lorenz(x = long_household, level = 1000)
+
+## Displaying the table
+datatable(lorenz_curve, options = list(pageLength = 10))
+
+## Replicating the graph
+lorenz_curve |> 
+  ggplot(aes(x = cum_population, y = cum_welfare, color = as.factor(year), group = year)) +
+  geom_line() + 
+  geom_abline(linetype = "dashed", color = "red") +
+  labs(color = "") +
+  theme_minimal() +
+  theme(legend.position = "bottom") 
+```
+
+### Q6 - Gini Coefficient
+
+```{r message=FALSE, warning=FALSE}
+## Computing the gini
+gini_list <- map(names(wdi_household), ~gini_calculator(wdi_household[[.x]]))
+gini_coefficient <- tibble(year = c(2001:2010),
+                           gini = unlist(gini_list))
+
+## Displaying the table
+datatable(gini_coefficient, options = list(pageLength = 10))
+
+## Plotting gini (again, keeping the exac same aesthetic)
+gini_coefficient |> 
+  ggplot(aes(x = year, y = gini)) +
+  geom_line(color = 'darkblue') +
+  geom_point() +
+  theme_minimal()
+```
+
+
