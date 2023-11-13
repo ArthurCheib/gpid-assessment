@@ -23,6 +23,8 @@ source(here('functions', 'weighted_sd.R'))
 
 Computing summary statistics of the World Development Indicators (WDI) dataset, 'wdi_data', which contains socio-economic metrics for various countries over time (in years).
 
+The script for all the functions I've used can be found [here](https://github.com/ArthurCheib/gpid-assessment/tree/main/functions).
+
 ```{r message=FALSE, warning=FALSE}
 ## Loading the data to be computed
 wdi_file <- 'wdi_in1.Rds'
