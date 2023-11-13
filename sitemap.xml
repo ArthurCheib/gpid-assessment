@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://ArthurCheib.github.io/gpid-assessment/index.html</loc>
-    <lastmod>2023-11-10T17:11:45.891Z</lastmod>
+    <loc>https://ArthurCheib.github.io/gpid-assessment/simulated_data.html</loc>
+    <lastmod>2023-11-13T04:56:33.601Z</lastmod>
+  </url>
+  <url>
+    <loc>https://ArthurCheib.github.io/gpid-assessment/basic_stats.html</loc>
+    <lastmod>2023-11-13T04:56:30.438Z</lastmod>
   </url>
 </urlset>
